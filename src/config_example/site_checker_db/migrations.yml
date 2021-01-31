@@ -1,0 +1,4 @@
+callbacks:
+    beforeAll:
+        - callbacks/beforeAll
+conn: "dbname=site_checker user=db_user password=db_password host=db_host port=14796"

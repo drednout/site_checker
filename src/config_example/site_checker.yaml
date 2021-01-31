@@ -1,0 +1,28 @@
+site_checker:
+  # in seconds
+  check_interval: 5
+  http_timeout: 5
+
+site_check_db_writeer:
+  check_interval: 5
+
+database:
+  name: site_checker
+  host: dbhost
+  port: 14796
+  ssl: true
+  cafile: site_checker_db.cer
+  user: dbuser
+  password: dbpassword
+  pool_min_size: 1
+  pool_max_size: 10
+
+kafka:
+  topic: site-checker
+  cafile: ca.pem
+  certfile: service.cert
+  keyfile: service.key
+  host: kafka_host
+  port: 14798
+
+
