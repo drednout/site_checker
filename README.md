@@ -1,6 +1,10 @@
 # site_checker
 Basic site reliability checker for aiven
 
+
+![Big picture](./pictures/big_picture.png)
+
+
 # how to run site_checker tests in Vagrant
 
 1. Install Vagrant using instrucations
