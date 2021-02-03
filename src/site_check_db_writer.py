@@ -21,6 +21,10 @@ LOG_LEVELS = {
 }
 
 
+class ErrorStopMsgLimit(Exception):
+    pass
+
+
 async def run_kafka_consumer(context):
     # TODO: move SQL code to dataclass in model
     insert_sql = """
@@ -35,6 +39,7 @@ async def run_kafka_consumer(context):
     """
     db_pool = context["db_pool"]
     kafka_consumer = context["kafka_consumer"]
+    max_check_count = context["args"].max_check_count
     conf = context["conf"]
     while True:
         async with db_pool.acquire() as conn:
@@ -71,11 +76,14 @@ async def run_kafka_consumer(context):
                         msg["regexp_check"],
                         check_timestamp_as_dt,
                     )
+                    context["check_count"] += 1
+                    if max_check_count and context["check_count"] >= max_check_count:
+                        raise ErrorStopMsgLimit
                     logging.info(
                         "Write to DB msg for site={} id={}".format(msg["site_info_id"], res[0][0])
                     )
 
-        await asyncio.sleep(conf["site_checker"]["check_interval"])
+        await asyncio.sleep(conf["site_check_db_writer"]["check_interval"])
 
 
 async def main():
@@ -92,6 +100,12 @@ async def main():
         "-l",
         default="info",
         choices=("info", "debug", "error", "warning"),
+    )
+    parser.add_argument(
+        "--max-check-count",
+        type=int,
+        default=None,
+        help="specify number of checks to read from kafka before exit(for tests)",
     )
     args = parser.parse_args()
 
@@ -142,12 +156,15 @@ async def main():
         "conf": conf,
         "db_pool": db_pool,
         "kafka_consumer": kafka_consumer,
+        "check_count": 0,
     }
     try:
         await run_kafka_consumer(context)
+    except ErrorStopMsgLimit:
+        logging.info("Limit of messages is reached. Stop.")
     finally:
         await kafka_consumer.stop()
-        await db_pool.terminate()
+        db_pool.terminate()
 
 
 if __name__ == "__main__":

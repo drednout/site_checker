@@ -3,7 +3,7 @@ site_checker:
   check_interval: 5
   http_timeout: 5
 
-site_check_db_writeer:
+site_check_db_writer:
   check_interval: 5
 
 database:

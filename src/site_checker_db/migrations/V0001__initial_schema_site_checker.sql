@@ -32,9 +32,11 @@ CREATE TABLE check_result (
 ) 
 PARTITION BY RANGE (created);
 
--- insert initial couple of entries
+-- insert initial couple of entries for tests
 INSERT INTO check_site_info (site_name, url) VALUES ('opennet home', 'http://opennet.ru');
-INSERT INTO Check_site_info (site_name, url, regexp) VALUES ('google home', 'http://google.com', '<html.*');
+INSERT INTO check_site_info (site_name, url, regexp) VALUES ('google home', 'http://google.com', '<html.*');
+INSERT INTO check_site_info (site_name, url) VALUES ('not found test', 'http://google.com/non_existing_page');
+INSERT INTO check_site_info (site_name, url) VALUES ('negative test', 'http://non_existing_domain');
 
 
 INSERT INTO ops (op) VALUES ('migration V0001__initial_schema_site_checker.sql');
@@ -47,4 +49,4 @@ CREATE TABLE check_result_y2021m01 PARTITION OF check_result
 CREATE TABLE check_result_y2021m02 PARTITION OF check_result
     FOR VALUES FROM ('2021-02-01') TO ('2021-03-01');
 CREATE TABLE check_result_y2021m03 PARTITION OF check_result
-    FOR VALUES FROM ('2021-03-01') TO ('2021-05-01');
+    FOR VALUES FROM ('2021-03-01') TO ('2021-04-01');
