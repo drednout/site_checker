@@ -12,7 +12,7 @@ https://www.vagrantup.com/docs/installation
 
 ```
 git clone https://github.com/drednout/site_checker
-cd site_checker
+cd site_checker/src
 ```
 
 3. Setup vagrant env with provision from this repo:
@@ -35,7 +35,10 @@ python tests/run_func_tests.py
 
 1. Clone repo:
 
-`git clone https://github.com/drednout/site_checker`
+```
+git clone https://github.com/drednout/site_checker
+cd site_checker/src
+```
 
 2. Create virtualenv, install dependencies:
 
