@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import asyncio
 import datetime
 import ssl
@@ -12,17 +14,8 @@ from aiokafka.helpers import create_ssl_context
 import certifi
 import yaml
 
-
-LOG_LEVELS = {
-    "info": logging.INFO,
-    "debug": logging.DEBUG,
-    "warning": logging.WARNING,
-    "error": logging.ERROR,
-}
-
-
-class ErrorStopMsgLimit(Exception):
-    pass
+from site_checker.log import LOG_LEVELS
+from site_checker.error import ErrorStopMsgLimit
 
 
 async def run_kafka_consumer(context):

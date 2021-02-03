@@ -11,13 +11,7 @@ import yaml
 import certifi
 import asyncpg
 
-
-LOG_LEVELS = {
-    "info": logging.INFO,
-    "debug": logging.DEBUG,
-    "warning": logging.WARNING,
-    "error": logging.ERROR,
-}
+from site_checker.log import LOG_LEVELS
 
 
 async def prepare_tests(context):
@@ -86,13 +80,13 @@ async def test_positive_5_checks(context):
     print_msg("Running test_positive_5_checks ... ")
     check_site_id = 2
     db_writer = subprocess.Popen(
-        "python site_check_db_writer.py  --max-check-count 5 -c {} -l error".format(args.config_path), shell=True
+        "site_check_db_writer.py  --max-check-count 5 -c {} -l error".format(args.config_path), shell=True
     )
     # wait some time is needed, because site_check_db_writer need some tome for initializing SSL context
     # for Kafka/PostgreSQL and other stuff
     await asyncio.sleep(2)
     site_checker = subprocess.Popen(
-        "python site_checker.py --check-site-id {} --max-check-count 5 -c {} -l error".format(
+        "site_check_http.py --check-site-id {} --max-check-count 5 -c {} -l error".format(
             check_site_id, args.config_path),
         shell=True,
     )
@@ -119,13 +113,13 @@ async def test_not_found_5_checks(context):
     print_msg("Running test_not_found_5_checks ... ")
     check_site_id = 3
     db_writer = subprocess.Popen(
-        "python site_check_db_writer.py  --max-check-count 5 -c {} -l error".format(args.config_path), shell=True
+        "site_check_db_writer.py  --max-check-count 5 -c {} -l error".format(args.config_path), shell=True
     )
     # wait some time is needed, because site_check_db_writer need some tome for initializing SSL context
     # for Kafka/PostgreSQL and other stuff
     await asyncio.sleep(2)
     site_checker = subprocess.Popen(
-        "python site_checker.py --check-site-id {} --max-check-count 5 -c {} -l error".format(
+        "site_check_http.py --check-site-id {} --max-check-count 5 -c {} -l error".format(
             check_site_id, args.config_path),
         shell=True,
     )
@@ -152,13 +146,13 @@ async def test_negative_http_client(context):
     print_msg("Running test_negative_http_client ... ")
     check_site_id = 4
     db_writer = subprocess.Popen(
-        "python site_check_db_writer.py  --max-check-count 1 -c {} -l error".format(args.config_path), shell=True
+        "site_check_db_writer.py  --max-check-count 1 -c {} -l error".format(args.config_path), shell=True
     )
     # wait some time is needed, because site_check_db_writer need some tome for initializing SSL context
     # for Kafka/PostgreSQL and other stuff
     await asyncio.sleep(2)
     site_checker = subprocess.Popen(
-        "python site_checker.py --check-site-id {} --max-check-count 1 -c {} -l error".format(
+        "site_check_http.py --check-site-id {} --max-check-count 1 -c {} -l error".format(
             check_site_id, args.config_path),
         shell=True,
     )
@@ -181,7 +175,7 @@ async def test_negative_http_client(context):
 
 async def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    default_conf = "site_checker.yaml"
+    default_conf = "config_test/site_checker.yaml"
     parser.add_argument(
         "--config-path",
         "-c",

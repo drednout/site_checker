@@ -1,7 +1,9 @@
+#!/usr/bin/env python
+
+import sys
 import asyncio
 import datetime
 import ssl
-import json
 import argparse
 import logging
 import re
@@ -14,17 +16,9 @@ from aiokafka.helpers import create_ssl_context
 import certifi
 import yaml
 
-
-LOG_LEVELS = {
-    "info": logging.INFO,
-    "debug": logging.DEBUG,
-    "warning": logging.WARNING,
-    "error": logging.ERROR,
-}
-
-
-class ErrorStopMsgLimit(Exception):
-    pass
+from site_checker.log import LOG_LEVELS
+from site_checker.error import ErrorStopMsgLimit
+import site_checker.model as model
 
 
 async def send_msg(context, topic, msg, partition=0):
@@ -52,58 +46,14 @@ class CheckStats:
             raise ErrorStopMsgLimit
 
 
-class CheckResult:
-    OK = "ok"
-    ERROR = "error"
-
-    ERROR_CODE_TIMEOUT = "timeout"
-    ERROR_CODE_HTTP_CLIENT = "http_client"
-    ERROR_CODE_EXCEPTION = "exception"
-
-    def __init__(
-        self,
-        site_info_id,
-        check_status,
-        check_error_code=None,
-        response_time=None,
-        latency_time=None,
-        regexp_check=None,
-        http_status=None,
-        check_timestamp=None,
-    ):
-        self.site_info_id = site_info_id
-        self.check_status = check_status
-        self.check_error_code = check_error_code
-        self.response_time = response_time
-        self.latency_time = latency_time
-        self.regexp_check = regexp_check
-        self.http_status = http_status
-        if check_timestamp is None:
-            self.check_timestamp = datetime.datetime.now()
-
-    def as_dict(self):
-        msg = {
-            "site_info_id": self.site_info_id,
-            "check_status": self.check_status,
-            "check_error_code": self.check_error_code,
-            "response_time": self.response_time,
-            "latency_time": self.latency_time,
-            "regexp_check": self.regexp_check,
-            "http_status": self.http_status,
-            "check_timestamp": self.check_timestamp,
-        }
-        return msg
-
-    def as_json(self, encoding="utf8"):
-        msg = self.as_dict()
-        msg["check_timestamp"] = msg["check_timestamp"].isoformat()
-        return json.dumps(msg).encode(encoding)
-
 
 async def do_request(context, session, site_info):
     event_loop = context["event_loop"]
     start_time = event_loop.time()
-    async with session.get(site_info["url"]) as response:
+    kwargs = {
+        "data": site_info["data"]
+    }
+    async with session.request(site_info["http_method"], site_info["url"], **kwargs) as response:
         latency_time = event_loop.time() - start_time
         logging.info("Check with id={} has status={}".format(site_info["id"], response.status))
         text = await response.text()
@@ -114,7 +64,7 @@ async def do_request(context, session, site_info):
             else:
                 regexp_check = False
         response_time = event_loop.time() - start_time
-        check_result = CheckResult(
+        check_result = model.CheckResult(
             site_info_id=site_info["id"],
             check_status="ok",
             response_time=response_time,
@@ -144,10 +94,10 @@ async def do_site_check(context, site_info):
                     site_info["id"], site_info["site_name"], e
                 )
             )
-            check_result = CheckResult(
+            check_result = model.CheckResult(
                 site_info_id=site_info["id"],
                 check_status="error",
-                check_error_code=CheckResult.ERROR_CODE_HTTP_CLIENT,
+                check_error_code=model.CheckResult.ERROR_CODE_HTTP_CLIENT,
             )
             context["check_stats"].incr_error()
 
@@ -157,7 +107,7 @@ async def do_site_check(context, site_info):
                     site_info["id"], site_info["site_name"]
                 )
             )
-            check_result = CheckResult(
+            check_result = model.CheckResult(
                 site_info_id=site_info["id"],
                 check_status="error",
                 check_error_code=CheckResult.ERROR_CODE_TIMEOUT,
@@ -170,14 +120,17 @@ async def do_site_check(context, site_info):
         await asyncio.sleep(conf["site_checker"]["check_interval"])
 
 
-def load_regexp(site_id, regexp):
-    compiled_regexp = None
-    try:
-        compiled_regexp = re.compile(regexp)
-    except re.error as e:
-        logging.error(f"Unable to compile regexp for site_id={site_id}, reason={e}")
+async def run_one_check(context):
+    db_pool = context["db_pool"]
+    conf = context["conf"]
+    args = context["args"]
 
-    return compiled_regexp
+    site_info = await model.get_site_check_by_id(db_pool, args.check_site_id)
+    if site_info is None:
+        logging.error("Unable to find check by id={} in check_site_info".format(args.check_site_id))
+        sys.exit(1)
+
+    await do_site_check(context, site_info)
 
 
 async def run_checks(context):
@@ -188,31 +141,15 @@ async def run_checks(context):
     last_timestamp = datetime.datetime.min
     stop_checks = False
 
-    sql = """
-        SELECT 
-            id, updated, site_name, url, data, http_method, regexp 
-        FROM 
-            check_site_info
-        WHERE
-            updated > $1
-    """
-    if args.check_site_id:
-        sql += " AND id=$2"
-
-    sql += """
-        ORDER BY 
-            updated
-    """
-
     def task_finish_callback(finished_task):
         logging.info(
             "Task {} was finished with result={}".format(finished_task.get_name(), finished_task)
         )
         site_info_id = int(finished_task.get_name())
-        check_result = CheckResult(
+        check_result = model.CheckResult(
             site_info_id=site_info_id,
-            check_status=CheckResult.ERROR,
-            check_error_code=CheckResult.ERROR_CODE_EXCEPTION,
+            check_status=model.CheckResult.ERROR,
+            check_error_code=model.CheckResult.ERROR_CODE_EXCEPTION,
         )
         try:
             send_msg(context, conf["kafka"]["topic"], check_result.as_json())
@@ -228,56 +165,32 @@ async def run_checks(context):
             pass
 
     while True:
-        async with db_pool.acquire() as conn:
-            sql_args = [last_timestamp]
-            if args.check_site_id:
-                sql_args.append(args.check_site_id)
-            site_check_info = await conn.fetch(sql, *sql_args)
-            logging.debug("site_check_info is {}".format(site_check_info))
-            for db_site_info in site_check_info:
-                site_id = db_site_info[0]
-                updated = db_site_info[1]
-                site_name = db_site_info[2]
-                url = db_site_info[3]
-                data = db_site_info[4]
-                http_method = db_site_info[5]
-                regexp = db_site_info[6]
-                site_info = {
-                    "id": site_id,
-                    "updated": updated,
-                    "site_name": site_name,
-                    "url": url,
-                    "data": data,
-                    "http_method": http_method,
-                    "regexp": regexp,
-                }
-                if regexp is not None:
-                    compiled_regexp = load_regexp(site_id, regexp)
-                    site_info["regexp"] = compiled_regexp
+        site_check_info = await model.get_last_site_checks(db_pool, last_timestamp)
+        logging.debug("site_check_info is {}".format(site_check_info))
+        for site_info in site_check_info:
+            site_id = site_info["id"]
+            if site_id in active_checks:
+                logging.info(f"Cancel old check with id={site_id}")
+                # cancel check, run updated
+                old_task = active_checks.pop(site_id)
+                old_task.cancel()
 
-                if site_id in active_checks:
-                    logging.info(f"Cancel old check with id={site_id}")
-                    # cancel check, run updated
-                    old_task = active_checks.pop(site_id)
-                    old_task.cancel()
+                logging.info(f"Schedule updated check {site_info}")
+                task = context["event_loop"].create_task(
+                    do_site_check(context, site_info), name=site_id
+                )
+                task.add_done_callback(task_finish_callback)
+                active_checks[site_id] = task
+            else:
+                logging.info(f"Schedule new check {site_info}")
+                # run new check
+                task = context["event_loop"].create_task(
+                    do_site_check(context, site_info), name=site_id
+                )
+                task.add_done_callback(task_finish_callback)
+                active_checks[site_id] = task
 
-                    logging.info(f"Schedule updated check {site_info}")
-                    task = context["event_loop"].create_task(
-                        do_site_check(context, site_info), name=site_id
-                    )
-                    task.add_done_callback(task_finish_callback)
-                    active_checks[site_id] = task
-                    pass
-                else:
-                    logging.info(f"Schedule new check {site_info}")
-                    # run new check
-                    task = context["event_loop"].create_task(
-                        do_site_check(context, site_info), name=site_id
-                    )
-                    task.add_done_callback(task_finish_callback)
-                    active_checks[site_id] = task
-
-                last_timestamp = updated
+            last_timestamp = site_info["updated"]
 
         logging.debug("active_checks are {}".format(active_checks))
         await asyncio.sleep(conf["site_checker"]["check_interval"])
@@ -368,7 +281,11 @@ async def main():
         "check_stats": CheckStats(total_limit=args.max_check_count),
     }
     try:
-        await run_checks(context)
+
+        if args.check_site_id:
+            await run_one_check(context)
+        else:
+            await run_checks(context)
     finally:
         await kafka_producer.stop()
         db_pool.terminate()
@@ -378,5 +295,7 @@ if __name__ == "__main__":
     try:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(main())
+    except ErrorStopMsgLimit:
+        logging.info("Limit of messages is reached. Stop.")
     except KeyboardInterrupt:
         logging.info("Received CTRL+C signal, exiting")

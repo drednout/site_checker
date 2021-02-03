@@ -37,6 +37,7 @@ INSERT INTO check_site_info (site_name, url) VALUES ('opennet home', 'http://ope
 INSERT INTO check_site_info (site_name, url, regexp) VALUES ('google home', 'http://google.com', '<html.*');
 INSERT INTO check_site_info (site_name, url) VALUES ('not found test', 'http://google.com/non_existing_page');
 INSERT INTO check_site_info (site_name, url) VALUES ('negative test', 'http://non_existing_domain');
+INSERT INTO check_site_info (site_name, http_method, url) VALUES ('local_post', 'POST', 'http://localhost');
 
 
 INSERT INTO ops (op) VALUES ('migration V0001__initial_schema_site_checker.sql');
