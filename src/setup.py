@@ -25,7 +25,8 @@ dependencies = [
     "sqlparse==0.4.1",
     "typing-extensions==3.7.4.3",
     "yandex-pgmigrate==1.0.6",
-    "yarl==1.6.3"
+    "yarl==1.6.3",
+    "supervisor==4.2.1",
 ]
 
 setup(

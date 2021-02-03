@@ -72,5 +72,10 @@ Vagrant.configure("2") do |config|
     python3.8 -m venv venv3.8 
     source venv3.8/bin/activate
     pip install -r .meta/packages
+    # get test config
+    wget -q -Oconfig_test.tar.gz 'https://drive.google.com/uc?id=1u8LuY01RBH5bf2gRGPiiWjhIzyuarUzh&export=download'
+    tar xzvf config_test.tar.gz
+    ln -sf `pwd`/config_test/migrations.yml site_checker_db
+    python setup.py develop
   SHELL
 end
